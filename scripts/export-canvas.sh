@@ -22,18 +22,30 @@ with sync_playwright() as p:
     page.wait_for_timeout(3000)
 
     # Hide UI elements using specific selectors
+    # These selectors work with excalidraw-cn canvas Docker image
     page.evaluate("""
     () => {
-        // Hide header bar
-        document.querySelectorAll('.header').forEach(el => el.style.display = 'none');
-        // Hide top menu bar
-        document.querySelectorAll('.App-menu_top').forEach(el => el.style.display = 'none');
-        // Hide left side toolbar
-        document.querySelectorAll('.FixedSideContainer_side_top').forEach(el => el.style.display = 'none');
-        // Hide bottom bar
-        document.querySelectorAll('.App-bottom-bar').forEach(el => el.style.display = 'none');
-        // Hide layer UI wrapper footer elements
-        document.querySelectorAll('.layer-ui__wrapper__footer-left, .layer-ui__wrapper__footer-right').forEach(el => el.style.display = 'none');
+        const selectors = [
+            '.header',                              // Top header bar
+            '.App-menu_top',                        // Top menu bar
+            '.FixedSideContainer_side_top',         // Left side toolbar
+            '.App-bottom-bar',                      // Bottom bar
+            '.layer-ui__wrapper__footer-left',      // Bottom left footer
+            '.layer-ui__wrapper__footer-right',     // Bottom right footer
+            '.layer-ui__wrapper',                   // Layer UI wrapper
+            '.App-top-bar',                         // Top bar (alternate name)
+            '.side-bar',                            // Side bar
+            '.cursor-tooltip',                      // Cursor tooltip
+            '.zoom-controls',                        // Zoom controls
+            '.FixedSideContainer',                   // Fixed side container
+        ];
+        selectors.forEach(sel => {
+            try {
+                document.querySelectorAll(sel).forEach(el => {
+                    el.style.display = 'none';
+                });
+            } catch(e) {}
+        });
     }
     """)
 
