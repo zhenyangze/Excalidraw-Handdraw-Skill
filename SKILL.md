@@ -38,6 +38,11 @@ curl -s http://localhost:3000/health
 
 ## Step 2: 创建图表元素
 
+**⚠️ 重要：REST API 格式说明**
+- **文字标签**：必须使用 `{"label": {"text": "文字"}}` 格式（不是 `text`）
+- **箭头连接**：必须使用 `{"start": {"id": "id1"}, "end": {"id": "id2"}}` 格式（不是 `startElementId`）
+- **箭头坐标**：箭头元素必须有 `x` 和 `y` 坐标（可以为 0）
+
 使用 `batch_create_elements` 批量创建元素。参考坐标系统：
 - 原点 (0,0) 在左上角
 - x 向右增加，y 向下增加
@@ -46,15 +51,15 @@ curl -s http://localhost:3000/health
 - 垂直间距：80-120px
 - 水平间距：40-60px
 
-**JSON 元素示例：**
+**REST API JSON 元素示例：**
 ```json
 {
   "elements": [
-    {"id": "lb", "type": "rectangle", "x": 300, "y": 50, "width": 180, "height": 60, "text": "负载均衡器"},
-    {"id": "svc-a", "type": "rectangle", "x": 100, "y": 200, "width": 160, "height": 60, "text": "服务 A"},
-    {"id": "svc-b", "type": "rectangle", "x": 450, "y": 200, "width": 160, "height": 60, "text": "服务 B"},
-    {"type": "arrow", "x": 0, "y": 0, "startElementId": "lb", "endElementId": "svc-a"},
-    {"type": "arrow", "x": 0, "y": 0, "startElementId": "lb", "endElementId": "svc-b"}
+    {"id": "lb", "type": "rectangle", "x": 300, "y": 50, "width": 180, "height": 60, "label": {"text": "负载均衡器"}},
+    {"id": "svc-a", "type": "rectangle", "x": 100, "y": 200, "width": 160, "height": 60, "label": {"text": "服务 A"}},
+    {"id": "svc-b", "type": "rectangle", "x": 450, "y": 200, "width": 160, "height": 60, "label": {"text": "服务 B"}},
+    {"id": "arrow1", "type": "arrow", "x": 0, "y": 0, "start": {"id": "lb"}, "end": {"id": "svc-a"}},
+    {"id": "arrow2", "type": "arrow", "x": 0, "y": 0, "start": {"id": "lb"}, "end": {"id": "svc-b"}}
   ]
 }
 ```
