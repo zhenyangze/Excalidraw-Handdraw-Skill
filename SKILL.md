@@ -43,26 +43,37 @@ curl -s http://localhost:3000/health
 - **箭头连接**：必须使用 `{"start": {"id": "id1"}, "end": {"id": "id2"}}` 格式（不是 `startElementId`）
 - **箭头坐标**：箭头元素必须有 `x` 和 `y` 坐标（可以为 0）
 
-使用 `batch_create_elements` 批量创建元素。参考坐标系统：
+**API 调用方式：**
+- 使用 `POST /api/elements` 逐个创建元素（不支持批量创建）
+- 每个元素必须包含完整的属性：id, type, x, y, width, height, label
+
+**Playwright 操作示例：**
+```javascript
+async () => {
+  const elements = [
+    { id: "lb", type: "rectangle", x: 300, y: 50, width: 180, height: 60, label: { text: "负载均衡器" } },
+    { id: "svc-a", type: "rectangle", x: 100, y: 200, width: 160, height: 60, label: { text: "服务 A" } },
+    { id: "arrow1", type: "arrow", x: 0, y: 0, start: { id: "lb" }, end: { id: "svc-a" } }
+  ];
+
+  for (const el of elements) {
+    await fetch('/api/elements', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(el)
+    });
+  }
+  return { success: true };
+}
+```
+
+参考坐标系统：
 - 原点 (0,0) 在左上角
 - x 向右增加，y 向下增加
 - 元素宽度：`max(160, labelCharCount * 9)`
 - 元素高度：单行 60px，双行 80px
 - 垂直间距：80-120px
 - 水平间距：40-60px
-
-**REST API JSON 元素示例：**
-```json
-{
-  "elements": [
-    {"id": "lb", "type": "rectangle", "x": 300, "y": 50, "width": 180, "height": 60, "label": {"text": "负载均衡器"}},
-    {"id": "svc-a", "type": "rectangle", "x": 100, "y": 200, "width": 160, "height": 60, "label": {"text": "服务 A"}},
-    {"id": "svc-b", "type": "rectangle", "x": 450, "y": 200, "width": 160, "height": 60, "label": {"text": "服务 B"}},
-    {"id": "arrow1", "type": "arrow", "x": 0, "y": 0, "start": {"id": "lb"}, "end": {"id": "svc-a"}},
-    {"id": "arrow2", "type": "arrow", "x": 0, "y": 0, "start": {"id": "lb"}, "end": {"id": "svc-b"}}
-  ]
-}
-```
 
 ## Step 3: 验证图表质量
 
@@ -77,71 +88,85 @@ curl -s http://localhost:3000/health
 - 元素重叠 → 调整坐标位置
 - 箭头穿过元素 → 使用曲线箭头或调整布局
 
-## Step 4: 导出图片
+## Step 4: 导出纯净图片（关键步骤）
 
-当图表完成后，使用 Playwright 导出只包含画布区域的图片（无 UI 按钮）：
+**⚠️ 重要：必须使用 Canvas API 导出纯净图片，不要使用页面截图！**
 
-```bash
-./scripts/export-canvas.sh [--output path]
+使用 Playwright 执行 JavaScript，直接从 canvas 元素导出：
+
+```javascript
+async () => {
+  const canvas = document.querySelector('canvas');
+  if (!canvas) return { success: false };
+
+  // 获取画布数据并下载
+  const dataUrl = canvas.toDataURL('image/png');
+  const link = document.createElement('a');
+  link.download = 'diagram.png';
+  link.href = dataUrl;
+  link.click();
+
+  return { success: true, downloaded: true };
+}
 ```
 
-默认输出到 `/tmp/excalidraw-diagram.png`
+**Playwright 操作步骤：**
+1. 使用 `browser_evaluate` 执行上述 JavaScript
+2. 图片会下载到 `.playwright-mcp/` 目录
+3. 使用 `mv` 命令移动到目标位置
 
-## Step 5: 保存到指定目录
-
-使用脚本保存到用户指定位置：
-
-```bash
-./scripts/save-to-file.sh --source <图片路径> --dest <目标路径>
+**示例：**
+```
+browser_evaluate → 执行导出 JS
+→ 下载到 .playwright-mcp/diagram.png
+→ mv .playwright-mcp/diagram.png ./output/diagram.png
 ```
 
-示例：
+**❌ 错误方式：**
+- 使用 `browser_take_screenshot` - 会包含网页工具栏和侧边栏
+- 使用 `browser_snapshot` + 截图 - 同样包含 UI 元素
+
+**✅ 正确方式：**
+- 使用 `browser_evaluate` 执行 canvas.toDataURL() 导出
+- 这样得到的图片是纯净的，只有画布内容，白色背景
+
+## Step 5: 保存到指定位置
+
+图片下载后保存在 `.playwright-mcp/` 目录，使用 mv 命令移动到目标位置：
+
 ```bash
-./scripts/save-to-file.sh --source /tmp/diagram.png --dest docs/diagrams/architecture.png
+mv .playwright-mcp/diagram.png ./docs/diagrams/architecture.png
 ```
 
-## Step 6: 插入/替换到文件
+## Step 6: 插入到 Markdown 文件
 
 将图片插入到 Markdown 文件：
 
-**插入到文件末尾：**
 ```markdown
-![图表描述](图片路径)
-```
-
-**插入到特定位置：**
-使用 sed 或脚本在指定标记位置插入：
-```bash
-# 在 <!-- diagram:start --> 和 <!-- diagram:end --> 之间插入
-./scripts/insert-image.sh --file README.md --marker "diagram:start" --image path/to/image.png
-```
-
-**替换已存在的图片：**
-```bash
-./scripts/replace-image.sh --file README.md --old-image old.png --new-image new.png
+![公司架构图](./docs/diagrams/architecture.png)
 ```
 
 ## 常用命令参考
 
-| 操作 | 命令 |
+| 操作 | 方法 |
 |------|------|
-| 启动 Canvas | `./scripts/start-canvas.sh` |
-| 停止 Canvas | `./scripts/stop-canvas.sh` |
-| 导出图片（仅画布） | `./scripts/export-canvas.sh /tmp/diagram.png` |
-| 保存到目录 | `./scripts/save-to-file.sh --source /tmp/d.png --dest docs/d.png` |
-| 插入到文件 | `./scripts/insert-image.sh --file README.md --marker "diagram:start" --image d.png` |
-| 替换图片 | `./scripts/replace-image.sh --file README.md --old d1.png --new d2.png` |
+| 启动 Canvas | `docker ps \| grep mcp_excalidraw-canvas` 确认运行 |
+| 停止 Canvas | `docker stop mcp_excalidraw-canvas` |
+| 创建元素 | `browser_evaluate` 执行 `fetch('/api/elements', {...})` |
+| 清除画布 | 点击页面 "Clear Canvas" 按钮 |
+| 同步画布 | 点击页面 "Sync to Backend" 按钮 |
+| 导出纯净图片 | `browser_evaluate` 执行 `canvas.toDataURL()` + 下载 |
+| 移动图片 | `mv .playwright-mcp/diagram.png ./output/diagram.png` |
 
 ## 注意事项
 
-1. **Docker 必须运行**：Canvas 服务器通过 Docker 运行
-2. **中文支持**：使用 `fontFamily: "1"` 或默认字体，Excalidraw 原生支持中文
-3. **中文手写字体**：如需更自然的手写效果，可使用 excalidraw-cn 的中文手写字体配置
-4. **图片导出**：需要浏览器窗口打开才能截图，确保 canvas UI 可访问
-5. **图片导出**：使用 Playwright 无头浏览器导出，只截取画布区域，无 UI 按钮
+1. **Docker 必须运行**：Canvas 服务器通过 Docker 运行，确保 `mcp_excalidraw-canvas` 容器在运行
+2. **中文支持**：Excalidraw 原生支持中文，无需额外配置
+3. **导出纯净图片**：必须使用 `canvas.toDataURL()` 方式导出，不要用页面截图
+4. **图片下载位置**：Playwright 下载的图片在 `.playwright-mcp/` 目录
 
 ## 故障排除
 
 - **Canvas 无法连接**：检查 Docker 容器是否运行 `docker ps | grep mcp_excalidraw-canvas`
-- **导出失败**：确保浏览器可访问 http://localhost:3000
-- **权限错误**：确保用户对目标目录有写权限
+- **导出图片有 UI 元素**：确保使用 `canvas.toDataURL()` 而不是 `browser_take_screenshot`
+- **元素创建失败**：确保每个元素包含完整属性（id, type, x, y, width, height）
