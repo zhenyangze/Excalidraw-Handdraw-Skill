@@ -72,8 +72,12 @@ async () => {
 - x 向右增加，y 向下增加
 - 元素宽度：`max(160, labelCharCount * 9)`
 - 元素高度：单行 60px，双行 80px
-- 垂直间距：80-120px
-- 水平间距：40-60px
+
+**⚠️ 布局最佳实践（避免重叠）：**
+- 垂直间距：**150-200px**（不要小于 150px）
+- 水平间距：**80-100px**（不要小于 80px）
+- 留白原则：宁可间距大，也不要太小
+- 多行文字时：height = 行数 × 35px + 20px
 
 ## Step 3: 验证图表质量
 
@@ -158,15 +162,189 @@ mv .playwright-mcp/diagram.png ./docs/diagrams/architecture.png
 | 导出纯净图片 | `browser_evaluate` 执行 `canvas.toDataURL()` + 下载 |
 | 移动图片 | `mv .playwright-mcp/diagram.png ./output/diagram.png` |
 
+## 常用图表模板
+
+### 组织架构图模板
+
+```javascript
+async () => {
+  const elements = [];
+
+  // 布局参数
+  const config = {
+    startY: 50,           // 起始 Y 坐标
+    levelGap: 180,        // 层级垂直间距
+    nodeWidth: 140,       // 节点宽度
+    nodeHeight: 60,       // 节点高度
+    hGap: 100             // 水平间距
+  };
+
+  // 第一层：CEO
+  elements.push({
+    id: "ceo", type: "rectangle",
+    x: 300, y: config.startY,
+    width: 160, height: config.nodeHeight,
+    label: { text: "CEO\n总经理" }
+  });
+
+  // 第二层：高管层（水平排列）
+  const level2 = ["CTO\n技术总监", "CFO\n财务总监", "COO\n运营总监", "CMO\n市场总监"];
+  const level2Y = config.startY + config.levelGap;
+
+  level2.forEach((label, i) => {
+    elements.push({
+      id: `l2-${i}`, type: "rectangle",
+      x: 50 + i * (config.nodeWidth + config.hGap),
+      y: level2Y,
+      width: config.nodeWidth, height: config.nodeHeight,
+      label: { text: label }
+    });
+    // 连接到 CEO
+    elements.push({
+      id: `arr-ceo-${i}`, type: "arrow",
+      x: 0, y: 0,
+      start: { id: "ceo" }, end: { id: `l2-${i}` }
+    });
+  });
+
+  // 创建所有元素
+  for (const el of elements) {
+    await fetch('/api/elements', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(el)
+    });
+  }
+  return { success: true };
+}
+```
+
+### 流程图模板（水平布局）
+
+```javascript
+async () => {
+  const steps = ["开始", "步骤1", "步骤2", "结束"];
+  const config = { startX: 50, y: 100, boxWidth: 120, boxHeight: 50, gap: 80 };
+
+  const elements = [];
+
+  steps.forEach((label, i) => {
+    elements.push({
+      id: `step-${i}`, type: "rectangle",
+      x: config.startX + i * (config.boxWidth + config.gap),
+      y: config.y,
+      width: config.boxWidth, height: config.boxHeight,
+      label: { text: label }
+    });
+
+    // 连接箭头（从上一个到当前）
+    if (i > 0) {
+      elements.push({
+        id: `arr-${i}`, type: "arrow",
+        x: 0, y: 0,
+        start: { id: `step-${i-1}` }, end: { id: `step-${i}` }
+      });
+    }
+  });
+
+  for (const el of elements) {
+    await fetch('/api/elements', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(el)
+    });
+  }
+  return { success: true };
+}
+```
+
+### 垂直流程图模板
+
+```javascript
+async () => {
+  const steps = ["输入", "处理", "输出"];
+  const config = { x: 300, startY: 50, boxWidth: 160, boxHeight: 60, vGap: 150 };
+
+  const elements = [];
+
+  steps.forEach((label, i) => {
+    elements.push({
+      id: `node-${i}`, type: "rectangle",
+      x: config.x,
+      y: config.startY + i * (config.boxHeight + config.vGap),
+      width: config.boxWidth, height: config.boxHeight,
+      label: { text: label }
+    });
+
+    if (i > 0) {
+      elements.push({
+        id: `arr-${i}`, type: "arrow",
+        x: 0, y: 0,
+        start: { id: `node-${i-1}` }, end: { id: `node-${i}` }
+      });
+    }
+  });
+
+  for (const el of elements) {
+    await fetch('/api/elements', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(el)
+    });
+  }
+  return { success: true };
+}
+```
+
+## 布局计算辅助函数
+
+在编写 JavaScript 时，可使用以下辅助计算：
+
+```javascript
+// 水平居中计算
+const centerX = (canvasWidth, elementWidth) => (canvasWidth - elementWidth) / 2;
+
+// 多元素水平均匀分布
+const distributeHorizontal = (count, elementWidth, totalWidth, startX) => {
+  const totalGap = totalWidth - count * elementWidth;
+  const gap = totalGap / (count + 1);
+  return Array.from({length: count}, (_, i) => startX + gap + i * (elementWidth + gap));
+};
+
+// 计算元素所需宽度（根据文字）
+const calcWidth = (text) => Math.max(120, text.length * 12);
+
+// 计算元素所需高度（根据行数）
+const calcHeight = (text) => {
+  const lines = text.split('\n').length;
+  return lines * 30 + 20;
+};
+```
+
 ## 注意事项
 
 1. **Docker 必须运行**：Canvas 服务器通过 Docker 运行，确保 `mcp_excalidraw-canvas` 容器在运行
 2. **中文支持**：Excalidraw 原生支持中文，无需额外配置
 3. **导出纯净图片**：必须使用 `canvas.toDataURL()` 方式导出，不要用页面截图
 4. **图片下载位置**：Playwright 下载的图片在 `.playwright-mcp/` 目录
+5. **间距宁大勿小**：使用较大间距（150px+）避免重叠，宁可图表松散也不要拥挤
+6. **箭头用元素引用**：使用 `start: {id}, end: {id}` 格式，让 Excalidraw 自动计算路径
 
 ## 故障排除
 
 - **Canvas 无法连接**：检查 Docker 容器是否运行 `docker ps | grep mcp_excalidraw-canvas`
 - **导出图片有 UI 元素**：确保使用 `canvas.toDataURL()` 而不是 `browser_take_screenshot`
 - **元素创建失败**：确保每个元素包含完整属性（id, type, x, y, width, height）
+- **元素重叠**：增大间距，垂直间距至少 150px，水平间距至少 80px
+- **箭头位置错误**：使用 `start: {id}, end: {id}` 元素引用格式，而非手动 points
+- **文字截断**：增加元素宽度，使用 `width = text.length * 12` 估算
+
+## 常见错误及修复
+
+| 问题 | 原因 | 解决方案 |
+|------|------|----------|
+| 矩形重叠 | 间距太小 | 垂直间距改为 150px+，水平 80px+ |
+| 箭头乱连 | points 坐标错误 | 改用 `start: {id}, end: {id}` 格式 |
+| 文字不全 | width/height 不足 | 根据字数行数计算足够尺寸 |
+| 图表太密 | 整体布局紧凑 | 放大间距，宁可松散不要拥挤 |
+| 连线穿过元素 | 布局未考虑路径 | 调整元素位置或使用曲线箭头 |
